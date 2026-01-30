@@ -1,149 +1,167 @@
-# Decoding Affective Neural Modulation by Musical Features (Core Model Code)
+# Dynamic Controlled Brain-network Conditional Diffusion (DCBCD)
 
-This repository contains the **core deep learning model implementation** of **DCBCD (Dynamic Controlled Brain-network Conditional Diffusion)** proposed in:
+This repository provides a PyTorch implementation of the **Dynamic Controlled Brain-network Conditional Diffusion (DCBCD)** model proposed in:
 
-**“Decoding Affective Neural Modulation by Musical Features: Insights from the Language of Music”**
-Yue Zhu#, Haifeng Zhang#, Yao Xiao, …, Chonghui Song*, Fei Wang*.
+> **Decoding Affective Neural Modulation by Musical Features: Insights from the Language of Music**
 
-## What this repo is for
-
-Music-based stimulation (MS) is widely used for affect regulation, yet its clinical deployment remains largely empirical. In our work, we treat **music as a structured, language-like temporal system** and model **music-induced brain network reconfiguration** as a **controllable graph-editing** problem.
-
-This repo provides the **core modeling code** used to couple:
-
-* **music semantic embeddings** (from a Music Understanding LLM, e.g., MU-LLaMA),
-* **temporally resolved fNIRS-derived neural dynamics** (time-series encoding, e.g., Tiny Time Mixers / TTM),
-* and **brain functional connectivity (FC) graphs** (Yeo 7-network based),
-
-to simulate the **transition from pre-stimulation brain networks to post-stimulation networks** via a **conditional diffusion process**, and to quantify **time-varying modulation intensity** via **cross-modal attention weights**.
-
-In short: **given music (as “language”) + neural time series**, DCBCD learns **how brain networks are progressively reorganized under stimulation**, and supports **interpretable temporal segmentation** into **high- vs low-modulation music segments (“effective music”)**.
+The DCBCD model is designed to mechanistically model **music-induced neural modulation** by simulating **controlled diffusion processes over functional brain networks**, conditioned on cross-modal interactions between music semantics and fNIRS-derived neural dynamics.
 
 ---
 
-## Key ideas implemented
+## Overview
 
-### 1) Brain network transition as conditional diffusion (DCBCD)
+Music-based stimulation (MS) induces dynamic and progressive reorganization of brain functional networks. Rather than directly predicting clinical outcomes, DCBCD formulates music-induced neural modulation as a **controllable graph-editing problem**, where:
 
-We represent functional brain connectivity as graphs and learn a **progressive editing trajectory** from:
+* **Graphs** represent brain functional connectivity.
+* **Diffusion processes** model gradual network reconfiguration.
+* **Cross-modal attention** captures how music semantics modulate neural dynamics over time.
+* **Pre-stimulation networks** act as anchor states constraining the diffusion trajectory.
 
-* **Pre-stimulation FC**  →  **During-stimulation dynamic FC**  →  **Post-stimulation FC**
-
-The diffusion framework provides an iterative, gradual transformation mechanism that matches how stimulation effects accumulate over time.
-
-### 2) Music–brain coupling via cross-modal attention
-
-We explicitly model how **high-level music semantics** regulate neural responses using a **cross-modal cross-attention** module:
-
-* Query/Key/Value are constructed across **music embeddings** and **neural time representations**
-* The resulting attention map gives both:
-
-  * a **control signal** for network editing, and
-  * a **time-resolved importance score** (average attention weights) used for modulation profiling.
-
-### 3) Model-informed temporal segmentation of “effective music”
-
-We compute a modulation intensity time series from attention weights and segment the session into:
-
-* **High-modulation segments** (median + 1.645 × MAD threshold)
-* **Low-modulation segments**
-
-To reduce confounds from session onset transient dynamics, we exclude early transient phases via a **data-driven HMM segmentation** on a global connectivity trajectory (e.g., Fiedler-based).
-
-This supports analyses reported in the paper, including:
-
-* high-modulation segments inducing **hierarchical hypoconnectivity patterns**
-* and their association with long-term depression improvement.
+This implementation follows the conceptual framework described in the manuscript while providing a clean, reproducible, and extensible engineering realization.
 
 ---
 
-## What’s included (core modules)
+## Model Architecture
 
-* `dc_bcd/`
+### Core Components
 
-  * `diffusion.py` — conditional diffusion backbone for FC graph editing
-  * `conditioner.py` — music–brain conditional module (cross-modal attention)
-  * `graph_ops.py` — graph construction & edit operators (FC adjacency processing)
-  * `encoders/` — neural time-series encoder (e.g., TTM) + music embedding adapter
-* `configs/` — reproducible experiment configs (training/eval/inference)
-* `scripts/` — training / evaluation / inference entry points
-* `utils/` — logging, metrics, checkpointing, seed control
+1. **Conditional Cross-Modal Module (`Conditional`)**
 
-> Note: this repo focuses on **model code**. Clinical data (fNIRS/PHQ-9) may require controlled access and is not redistributed here.
+   * Implements *paper-consistent* cross-attention:
+
+     * **Query**: fNIRS-derived neural representations
+     * **Key / Value**: music semantic embeddings
+   * Produces time-resolved conditional neural states.
+   * Attention weights are used to quantify *modulation intensity*.
+
+2. **Graph Diffusion Model (`GraphDiffusionModel`)**
+
+   * Implements a DDPM-style diffusion process over adjacency matrices.
+   * Learns to transform pre-stimulation brain networks toward post-stimulation states.
+   * Conditioned on:
+
+     * Node identity embeddings
+     * Noisy adjacency values
+     * Pre-stimulation anchor graph
+     * Conditional neural states
+     * Diffusion timestep embeddings
+
+3. **Edge Noise Predictor (`DiffusionEdgePredictor`)**
+
+   * Predicts diffusion noise for each graph edge.
+   * Aligns diffusion steps with temporal indices of neural modulation, consistent with the manuscript.
 
 ---
 
-## Minimal usage
+## Paper-Consistent Design Choices
 
-### Training (example)
+The following design decisions strictly follow the manuscript:
 
-1. Prepare:
+* Music semantics modulate neural dynamics via **cross-modal attention**
+* Conditioning is **time-resolved**, aligned with diffusion steps
+* Pre-stimulation graphs are used as **anchors**
+* Attention weights are interpreted as **modulation intensity**
 
-   * pre-stimulation FC graphs
-   * post-1st-stimulation FC graphs (anchor)
-   * during-stimulation neural time-series features
-   * aligned music embeddings per time window
+These components correspond directly to the DCBCD conceptual framework described in the paper.
 
-2. Train:
+---
 
-```bash
-python scripts/train.py --config configs/dcbcd.yaml
+## Engineering Extensions (Clearly Marked)
+
+For stability and practical training, several **engineering extensions** are included. These do **not alter the conceptual claims** of the paper and can be removed or ablated if desired:
+
+* **Approximate topological loss**
+
+  * Uses a differentiable connectivity curve based on Laplacian eigenvalues
+  * Encourages structurally consistent graph evolution
+* **Attention entropy regularization**
+
+  * Promotes sharper, interpretable cross-modal attention
+* **Zero-condition branch**
+
+  * Acts as a control/baseline pathway analogous to classifier-free guidance
+
+These extensions are explicitly documented in the code to ensure transparency and reviewer clarity.
+
+---
+
+## Repository Structure
+
+```
+.
+├── model_condition.py     # Cross-modal conditional attention module
+├── model_diffusion.py     # Graph diffusion model and training logic
+├── README.md              # This file
 ```
 
-### Inference (estimate modulation intensity and segment effective music)
+---
 
-```bash
-python scripts/infer.py --ckpt <path_to_ckpt> --out <out_dir>
+## Input / Output Specifications
+
+### Inputs
+
+* `g_pre`: `[B, N, N]`
+  Pre-stimulation functional connectivity graphs
+* `g_pst`: `[B, N, N]`
+  Post-stimulation functional connectivity graphs
+* `feat_fnirs`: `[B, N, T_f, D_fnirs]`
+  Time-resolved fNIRS neural features
+* `feat_music`: `[B, 1, T_m, D_music]`
+  Music semantic embeddings (e.g., from MU-LLaMA)
+
+### Outputs
+
+* Total training loss
+* Diffusion noise prediction loss
+* Structural/topological regularization loss
+* Cross-modal attention weights (for modulation analysis)
+
+---
+
+## Usage Example (Training Step)
+
+```python
+model = GraphDiffusionModel(
+    T=1000,
+    beta_start=1e-4,
+    beta_end=0.02,
+    node_feature_dim=48,
+    node_emb_dim=64,
+    time_emb_dim=64,
+    hidden_dim=64,
+)
+
+total_loss, diff_loss, topo_loss, attn = model(
+    g_pre, g_pst, feat_fnirs, feat_music
+)
 ```
 
-Outputs typically include:
-
-* predicted post-stimulation FC graph
-* time-wise modulation curve (attention-derived importance score)
-* high/low-modulation time masks
-
 ---
 
-## Reproducibility & reporting
+## Reproducibility Notes
 
-We emphasize **mechanism-oriented modeling** rather than directly predicting clinical scores. Reported outcomes are typically framed as:
-
-* similarity between predicted and observed post-stimulation brain networks,
-* pathway-level FC changes (e.g., unimodal → transmodal hierarchy),
-* interpretability via cross-modal attention and time segmentation,
-* downstream association between modulation-sensitive ΔFC and symptom improvement (e.g., ΔPHQ-9).
-
-Random seeds and config snapshots are logged for deterministic reruns when possible.
-
----
-
-## Data & ethics
-
-* This repository **does not ship raw participant data**.
-* fNIRS and clinical measures were collected under IRB approval and informed consent (see paper for registry and ethics).
-* If you are an academic collaborator and require data access, please follow the contact route described in the manuscript.
+* All modules include explicit shape checks.
+* Cross-modal attention semantics are fixed and documented.
+* Engineering extensions are clearly separated from core mechanisms.
+* The code is written to be directly open-source and reviewer-auditable.
 
 ---
 
 ## Citation
 
+If you use this code, please cite:
+
+```bibtex
+@article{zhu2024music,
+  title={Decoding Affective Neural Modulation by Musical Features: Insights from the Language of Music},
+  author={Zhu, Yue and Zhang, Haifeng and others},
+  journal={},
+  year={2024}
+}
+```
+
 ---
 
-## Why this repo may be useful to the community
+## Disclaimer
 
-Most music-therapy ML pipelines stop at:
-
-* handcrafted acoustic features, or
-* end-to-end clinical score prediction.
-
-DCBCD provides a third path:
-
-* **explicit network transition modeling**
-* **temporally localized “effective music” discovery**
-* and **interpretable music–brain coupling** via cross-modal attention.
-
-This can support both:
-
-* mechanistic neuroscience questions, and
-* mechanism-driven stimulus design (including AI-guided music generation prompts).
-
+This repository provides a research implementation intended for scientific reproducibility and methodological transparency. Clinical conclusions should be drawn from the experimental results reported in the associated manuscript, not from the code alone.
